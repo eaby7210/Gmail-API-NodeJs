@@ -1,0 +1,16 @@
+{
+  "name": "gmail-node",
+  "version": "1.0.0",
+  "description": "Gmail API ",
+  "main": "index.js",
+  "scripts": {
+    "test": "node index.js"
+  },
+  "author": "Eaby Thomas C",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^0.21.4",
+    "dotenv": "^16.3.1",
+    "qs": "^6.10.1"
+  }
+}
