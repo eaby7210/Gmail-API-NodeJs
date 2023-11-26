@@ -30,11 +30,9 @@ class GmailAPI {
     await axios(config)
       .then(async function (response) {
         accessToken = await response.data.access_token;
-
-        console.log("Access Token " + accessToken);
       })
       .catch(function (error) {
-        console.log(error);
+        console.log("Access Token Error :", error);
       });
 
     return accessToken;
@@ -49,19 +47,24 @@ class GmailAPI {
         Authorization: `Bearer ${await this.accessToken} `,
       },
     };
-    let threadId = "";
 
+    let messagesObj = [];
+    let emaillist = [];
     await axios(config1)
       .then(async function (response) {
-        threadId = await response.data["messages"][0].id;
+        messagesObj = await response.data.messages;
+        messagesObj.forEach((email) => {
+          const threadId = email.threadId;
+          emaillist.push(threadId);
+        });
 
-        console.log("ThreadId = " + threadId);
+        console.log("data = " + emaillist);
       })
       .catch(function (error) {
         console.log(error);
       });
 
-    return threadId;
+    return emaillist;
   };
 
   readGmailContent = async (messageId) => {
@@ -74,34 +77,50 @@ class GmailAPI {
     };
 
     let data = {};
+    let message = "";
+    let subj = {};
 
     await axios(config)
       .then(async function (response) {
         data = await response.data;
+
+        if (data.payload["parts"] === undefined) {
+          const a = data.payload.body.data;
+          console.log(
+            "Ignoring message since a seperate thread:  ",
+            Buffer.from(a, "base64").toString("ascii")
+          );
+        } else {
+          const encoded = data.payload["parts"][0].body.data;
+          subj = data.payload.headers.find(
+            (header) => header.name === "Subject"
+          );
+          message = Buffer.from(encoded, "base64").toString("ascii");
+        }
       })
       .catch(function (error) {
         console.log(error);
       });
 
-    return data;
+    return {
+      id: messageId,
+      subject: subj.value,
+      message: message,
+    };
   };
 
   readInboxContent = async (searchText) => {
-    const threadId = await this.searchGmail(searchText);
-    const message = await this.readGmailContent(threadId);
+    const threadIdList = await this.searchGmail(searchText);
 
-    const encodedMessage = await message.payload["parts"][0].body.data;
-
-    const decodedStr = Buffer.from(encodedMessage, "base64").toString("ascii");
-
-    console.log(decodedStr);
-
-    return decodedStr;
+    const messages = threadIdList.map(async (threadId) => {
+      return await this.readGmailContent(threadId);
+    });
+    const msgList = await Promise.all(messages);
+    return msgList;
   };
 
   sendEmail = async (to, subject, body) => {
     const access_token = await this.getAcceToken();
-    console.log("access tokennnnnn", access_token);
 
     const emailContent = [`To: ${to}`, `Subject: ${subject}`, "", body];
     const rawMessage = emailContent.join("\n");
@@ -118,9 +137,7 @@ class GmailAPI {
         raw: encodedMessage,
       },
     };
-
     let response;
-
     try {
       response = await axios(config);
       console.log("Email sent successfully:", response.data);
@@ -130,11 +147,82 @@ class GmailAPI {
         error.response ? error.response.data : error.message
       );
     }
-
     return response;
   };
+  replyEmail = async (messages, to, replyMessageBody) => {
+    try {
+      const access_token = await this.getAcceToken();
+      const replyPromises = messages.map(async (messageData) => {
+        const { id, subject, message } = messageData;
 
-  // Helper method to create a raw email message
+        const encodedMessage = Buffer.from(
+          JSON.stringify({
+            to: [
+              {
+                emailAddress: "angelmariyathomas10@gmail.com",
+              },
+            ],
+            from: "EABY7210@gmail.com",
+            threadId: id,
+            subject: `Re: ${subject}`,
+            body: {
+              text: replyMessageBody,
+            },
+          })
+        ).toString("base64");
+        console.log(to);
+        const config = {
+          method: "post",
+          url: "https://www.googleapis.com/gmail/v1/users/me/messages/send",
+          headers: {
+            Authorization: `Bearer ${access_token}`,
+            "Content-Type": "application/json",
+          },
+          data: {
+            raw: encodedMessage,
+          },
+        };
+        console.log(config);
+        const response = await axios(config);
+        console.log(response);
+        if (response.status === 200) {
+          console.log(
+            `Reply to message \n${id}-${message}\n sent successfully`
+          );
+        } else if (response.status === 404) {
+          console.log(`Message ${id} not found. Skipping reply.`);
+        } else {
+          console.error(
+            `Error sending reply to message ${id}: ${response.status}`
+          );
+        }
+      });
+    } catch (error) {
+      console.log(`Error in sending reply:\n ${error}`);
+      throw error.data;
+    }
+  };
+  markEmail = async (id, label) => {
+    let config = {
+      method: "post",
+      url: `https://www.googleapis.com/gmail/v1/users/me/messages/${id}/modify`,
+      headers: {
+        Authorization: `Bearer ${await this.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      data: {
+        addLabelIds: [label],
+      },
+    };
+    try {
+      const response = await axios(config);
+      console.log(`Message labeled with "${label}":`, response.data);
+    } catch (error) {
+      console.error(
+        "Error labeling message:",
+        error.response ? error.response.data : error.message
+      );
+    }
+  };
 }
-
 module.exports = new GmailAPI();

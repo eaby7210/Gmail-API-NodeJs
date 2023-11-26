@@ -1,11 +1,14 @@
 let gmail = require("./GmailApi");
 
-const to = "eabythomascu@gmail.com";
-const subject = "Test Email tes2";
+const to = "angelmariyathomas10@gmail.com";
+const subject = "New Test Email message";
 const body = "Hello, this is a test email!";
-
-gmail.sendEmail(to, subject, body);
-// Functions such as:
-//   readInboxContent(searchText) seachText=>filters,
-// sendEmail (to, subject, body)
-//    are available to use
+const replyBody = "Thank you for your email. This is an automated reply.";
+func = async () => {
+  const unreadThreads = await gmail.readInboxContent(
+    "is:unread from:(angelmariyathomas10@gmail.com)"
+  );
+  await gmail.sendEmail(to, subject, body);
+  await gmail.replyEmail(unreadThreads, to, replyBody);
+};
+func();
